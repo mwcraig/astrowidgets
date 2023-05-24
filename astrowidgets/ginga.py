@@ -538,7 +538,7 @@ class ImageWidget(ipyw.VBox):
         return sorted(self._marktags)
 
     def get_markers_by_name(self, marker_name, x_colname='x', y_colname='y',
-                    skycoord_colname='coord'):
+                            skycoord_colname='coord'):
         """
         Return the locations of existing markers.
 
@@ -560,7 +560,7 @@ class ImageWidget(ipyw.VBox):
             Table of markers, if any, or ``None``.
 
         """
-                # We should always allow the default name. The case
+        # We should always allow the default name. The case
         # where that table is empty will be handled in a moment.
         if (marker_name not in self._marktags
                 and marker_name != self._default_mark_tag_name):

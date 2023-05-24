@@ -217,8 +217,8 @@ class ImageWidgetAPITest:
                                skycoord_colname='coord')
         # Don't care about the order of the marker names so use set instead of
         # list.
-        assert (set(self.image.get_marker_names()) ==
-                set(['test2', self.image._default_mark_tag_name]))
+        assert (set(self.image.get_marker_names())
+                == set(['test2', self.image._default_mark_tag_name]))
 
         # Clear markers to not pollute other tests.
         self.image.remove_all_markers()
