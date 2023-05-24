@@ -71,30 +71,25 @@ class ImageViewerInterface(Protocol):
                     marker_name=None):
         raise NotImplementedError
 
-    # @abstractmethod
-    # def remove_all_markers(self):
-    #     raise NotImplementedError
-
     @abstractmethod
-    def reset_markers(self):
+    def remove_all_markers(self):
         raise NotImplementedError
 
-    # @abstractmethod
-    # def remove_markers_by_name(self, marker_name=None):
-    #     raise NotImplementedError
-
     @abstractmethod
-    def remove_markers(self, marker_name=None):
+    def remove_markers_by_name(self,
+                               marker_name):
         raise NotImplementedError
 
-    # @abstractmethod
-    # def get_all_markers(self):
-    #     raise NotImplementedError
+    @abstractmethod
+    def get_all_markers(self):
+        raise NotImplementedError
 
     @abstractmethod
-    def get_markers(self, x_colname='x', y_colname='y',
-                    skycoord_colname='coord',
-                    marker_name=None):
+    def get_markers_by_name(self,
+                            marker_name,
+                            x_colname='x',
+                            y_colname='y',
+                            skycoord_colname='coord'):
         raise NotImplementedError
 
     # Methods that modify the view
