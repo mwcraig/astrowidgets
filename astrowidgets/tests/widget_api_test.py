@@ -102,7 +102,7 @@ class ImageWidgetAPITest:
         assert self.image.zoom_level == 6  # 3 x 2
 
     def test_marking_operations(self):
-        marks = self.image.get_markers(marker_name="all")
+        marks = self.image.get_all_markers()
         assert marks is None
         assert not self.image.is_marking
 
@@ -141,7 +141,7 @@ class ImageWidgetAPITest:
         # Regression test for GitHub Issue 97:
         # Marker name with no markers should give warning.
         with pytest.warns(UserWarning, match='is empty') as warning_lines:
-            t = self.image.get_markers(marker_name='markymark')
+            t = self.image.get_markers_by_name('markymark')
         assert t is None
         assert len(warning_lines) == 1
 
@@ -160,11 +160,8 @@ class ImageWidgetAPITest:
         self.image.stop_marking(clear_markers=True)
 
         assert self.image.is_marking is False
-        assert self.image.get_markers(marker_name="all") is None
-
-        # Hate this, should add to public API
-        marknames = self.image._marktags
-        assert len(marknames) == 0
+        assert self.image.get_all_markers() is None
+        assert len(self.image.get_marker_names()) == 0
 
         # Make sure that click_drag is restored as expected
         assert self.image.click_drag
@@ -187,13 +184,10 @@ class ImageWidgetAPITest:
         # Add more markers under different name.
         self.image.add_markers(tab, x_colname='x', y_colname='y',
                                skycoord_colname='coord', marker_name='test2')
-
-        marknames = self.image._marktags
-        assert marknames == set(['test1', 'test2'])
-        # assert self.image.get_marker_names() == ['test1', 'test2']
+        assert self.image.get_marker_names() == ['test1', 'test2']
 
         # No guarantee markers will come back in the same order, so sort them.
-        t1 = self.image.get_markers(marker_name='test1')
+        t1 = self.image.get_markers_by_name('test1')
         # Sort before comparing
         t1.sort('x')
         tab.sort('x')
@@ -201,7 +195,7 @@ class ImageWidgetAPITest:
         assert (t1['y'] == tab['y']).all()
 
         # That should have given us two copies of the input table
-        t2 = self.image.get_markers(marker_name="all")
+        t2 = self.image.get_all_markers()
         expected = vstack([tab, tab], join_type='exact')
         # Sort before comparing
         t2.sort(['x', 'y'])
@@ -209,10 +203,8 @@ class ImageWidgetAPITest:
         assert (t2['x'] == expected['x']).all()
         assert (t2['y'] == expected['y']).all()
 
-        self.image.remove_markers(marker_name='test1')
-        marknames = self.image._marktags
-        assert marknames == set(['test2'])
-        # assert self.image.get_marker_names() == ['test2']
+        self.image.remove_markers_by_name('test1')
+        assert self.image.get_marker_names() == ['test2']
 
         # Ensure unable to mark with reserved name
         for name in self.image.RESERVED_MARKER_SET_NAMES:
@@ -225,27 +217,24 @@ class ImageWidgetAPITest:
                                skycoord_colname='coord')
         # Don't care about the order of the marker names so use set instead of
         # list.
-        marknames = self.image._marktags
-        assert (set(marknames) == set(['test2', self.image._default_mark_tag_name]))
-        # assert (set(self.image.get_marker_names()) ==
-        #         set(['test2', self.image._default_mark_tag_name]))
+        assert (set(self.image.get_marker_names())
+                == set(['test2', self.image._default_mark_tag_name]))
 
         # Clear markers to not pollute other tests.
-        self.image.reset_markers()
-        marknames = self.image._marktags
-        assert len(marknames) == 0
-        assert self.image.get_markers(marker_name="all") is None
+        self.image.remove_all_markers()
+        assert len(self.image.get_marker_names()) == 0
+        assert self.image.get_all_markers() is None
         with pytest.warns(UserWarning, match='is empty'):
-            assert self.image.get_markers(marker_name=self.image._default_mark_tag_name) is None
+            assert self.image.get_markers_by_name(self.image._default_mark_tag_name) is None
 
         with pytest.raises(ValueError, match="No markers named 'test1'"):
-            self.image.get_markers(marker_name='test1')
+            self.image.get_markers_by_name('test1')
         with pytest.raises(ValueError, match="No markers named 'test2'"):
-            self.image.get_markers(marker_name='test2')
+            self.image.get_markers_by_name('test2')
 
     def test_remove_markers(self):
         with pytest.raises(ValueError, match='arf'):
-            self.image.remove_markers(marker_name='arf')
+            self.image.remove_markers_by_name('arf')
 
     def test_adding_markers_as_world(self, data, wcs):
         ndd = NDData(data=data, wcs=wcs)
@@ -260,7 +249,7 @@ class ImageWidgetAPITest:
         marks_coords = SkyCoord(marks_world, unit='degree')
         mark_coord_table = Table(data=[marks_coords], names=['coord'])
         self.image.add_markers(mark_coord_table, use_skycoord=True)
-        result = self.image.get_markers()
+        result = self.image.get_all_markers()
         # Check the x, y positions as long as we are testing things...
         np.testing.assert_allclose(result['x'], marks_pix['x'])
         np.testing.assert_allclose(result['y'], marks_pix['y'])
@@ -286,7 +275,7 @@ class ImageWidgetAPITest:
         with pytest.raises(ValueError, match='must be one of'):
             self.image.cuts = 'not a valid value'
 
-        with pytest.raises(ValueError, match='must have length 2'):
+        with pytest.raises(ValueError, match=r'must be given as \(low, high\)|must have length 2'):
             self.image.cuts = (1, 10, 100)
 
         assert 'histogram' in self.image.autocut_options
@@ -327,7 +316,7 @@ class ImageWidgetAPITest:
         # If is_marking is true then trying to enable click_drag should fail
         self.image.click_drag = False
         self.image._is_marking = True
-        with pytest.raises(ValueError, match=r'([Ii]nteractive marking)|(while in marking mode)'):
+        with pytest.raises(ValueError, match=r'[Ii]nteractive marking|while in marking mode'):
             self.image.click_drag = True
         self.image._is_marking = False
 

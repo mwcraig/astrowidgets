@@ -1,6 +1,12 @@
-"""Module containing core functionality of ``astrowidgets``."""
+"""The ``astrowidgets.ginga`` module contains a widget implemented with the
+Ginga backend.
 
-# STDLIB
+For this to work, ``astrowidgets`` must be installed along with the optional
+dependencies specified for the Ginga backend; e.g.,::
+
+    pip install 'astrowidgets[ginga]'
+
+"""
 import functools
 import warnings
 
@@ -244,13 +250,6 @@ class ImageWidget(ipyw.VBox):
                 print('Centered on X={} Y={}'.format(data_x + self._pixel_offset,
                                                      data_y + self._pixel_offset))
 
-#     def _repr_html_(self):
-#         """
-#         Show widget in Jupyter notebook.
-#         """
-#         from IPython.display import display
-#         return display(self._widget)
-
     def load_fits(self, fitsorfn, numhdu=None, memmap=None):
         """
         Load a FITS file into the viewer.
@@ -431,6 +430,21 @@ class ImageWidget(ipyw.VBox):
         """
         Start marking, with option to name this set of markers or
         to specify the marker style.
+
+        This disables `click_center` and `click_drag`, but enables `scroll_pan`.
+
+        Parameters
+        ----------
+        marker_name : str or `None`, optional
+            Marker name to use. This is useful if you want to set different
+            groups of markers. If given, this cannot be already defined in
+            ``RESERVED_MARKER_SET_NAMES`` attribute. If not given, an internal
+            default is used.
+
+        marker : dict or `None`, optional
+            Set the marker properties; see `marker`. If not given, the current
+            setting is used.
+
         """
         self._cached_state = dict(click_center=self.click_center,
                                   click_drag=self.click_drag,
@@ -457,9 +471,9 @@ class ImageWidget(ipyw.VBox):
         Parameters
         ----------
         clear_markers : bool, optional
-            If ``clear_markers`` is `False`, existing markers are
-            retained until :meth:`reset_markers` is called.
-            Otherwise, they are erased.
+            If `False`, existing markers are retained until
+            :meth:`remove_all_markers` is called.
+            Otherwise, they are all erased.
         """
         if self.is_marking:
             self._is_marking = False
@@ -468,7 +482,7 @@ class ImageWidget(ipyw.VBox):
             self.scroll_pan = self._cached_state['scroll_pan']
             self._cached_state = {}
             if clear_markers:
-                self.reset_markers()
+                self.remove_all_markers()
 
     @property
     def marker(self):
@@ -512,9 +526,19 @@ class ImageWidget(ipyw.VBox):
         # Only set this once we have successfully created a marker
         self._marker_dict = val
 
-    def get_markers(self, x_colname='x', y_colname='y',
-                    skycoord_colname='coord',
-                    marker_name=None):
+    def get_marker_names(self):
+        """Return a list of used marker names.
+
+        Returns
+        -------
+        names : list of str
+            Sorted list of marker names.
+
+        """
+        return sorted(self._marktags)
+
+    def get_markers_by_name(self, marker_name, x_colname='x', y_colname='y',
+                            skycoord_colname='coord'):
         """
         Return the locations of existing markers.
 
@@ -536,44 +560,6 @@ class ImageWidget(ipyw.VBox):
             Table of markers, if any, or ``None``.
 
         """
-        if marker_name is None:
-            marker_name = self._default_mark_tag_name
-
-        if marker_name == 'all':
-            # If it wasn't for the fact that SKyCoord columns can't
-            # be stacked this would all fit nicely into a list
-            # comprehension. But they can't, so we delete the
-            # SkyCoord column if it is present, then add it
-            # back after we have stacked.
-            coordinates = []
-            tables = []
-            for name in self._marktags:
-                table = self.get_markers(x_colname=x_colname,
-                                         y_colname=y_colname,
-                                         skycoord_colname=skycoord_colname,
-                                         marker_name=name)
-                if table is None:
-                    # No markers by this name, skip it
-                    continue
-
-                try:
-                    coordinates.extend(c for c in table[skycoord_colname])
-                except KeyError:
-                    pass
-                else:
-                    del table[skycoord_colname]
-                tables.append(table)
-
-            if len(tables) == 0:
-                return None
-
-            stacked = vstack(tables, join_type='exact')
-
-            if coordinates:
-                stacked[skycoord_colname] = SkyCoord(coordinates)
-
-            return stacked
-
         # We should always allow the default name. The case
         # where that table is empty will be handled in a moment.
         if (marker_name not in self._marktags
@@ -583,9 +569,9 @@ class ImageWidget(ipyw.VBox):
         try:
             c_mark = self._viewer.canvas.get_object_by_tag(marker_name)
         except Exception:
-            # No markers in this table. Issue a warning and continue
-            warnings.warn(f"Marker set named '{marker_name}' is empty",
-                          category=UserWarning)
+            # No markers in this table. Issue a warning and continue.
+            # Test wants this outside of logger, so...
+            warnings.warn(f"Marker set named '{marker_name}' is empty", UserWarning)
             return None
 
         image = self._viewer.get_image()
@@ -604,10 +590,9 @@ class ImageWidget(ipyw.VBox):
                 xy_col.append([obj.x, obj.y])
                 if include_skycoord:
                     radec_col.append([np.nan, np.nan])
-            elif not include_skycoord:  # marker in WCS but image has none
-                self.logger.warning(
-                    'Skipping ({},{}); image has no WCS'.format(obj.x, obj.y))
-            else:  # wcs
+            elif not include_skycoord:  # Marker in WCS but image has none
+                self.logger.warning(f'Skipping ({obj.x},{obj.y}); image has no WCS')
+            else:  # WCS
                 xy_col.append([np.nan, np.nan])
                 radec_col.append([obj.x, obj.y])
 
@@ -630,10 +615,6 @@ class ImageWidget(ipyw.VBox):
 
             sky_col = SkyCoord(radec_col[:, 0], radec_col[:, 1], unit='deg')
 
-        # Convert X,Y from 0-indexed to 1-indexed
-        if self._pixel_offset != 0:
-            xy_col += self._pixel_offset
-
         # Build table
         if include_skycoord:
             markers_table = Table(
@@ -645,6 +626,44 @@ class ImageWidget(ipyw.VBox):
         # Either way, add the marker names
         markers_table['marker name'] = marker_name
         return markers_table
+
+    def get_all_markers(self, x_colname='x', y_colname='y', skycoord_colname='coord'):
+        """Run :meth:`get_markers_by_name` for all markers."""
+
+        # If it wasn't for the fact that SkyCoord columns can't
+        # be stacked this would all fit nicely into a list
+        # comprehension. But they can't, so we delete the
+        # SkyCoord column if it is present, then add it
+        # back after we have stacked.
+        coordinates = []
+        tables = []
+        for name in self._marktags:
+            table = self.get_markers_by_name(
+                name, x_colname=x_colname, y_colname=y_colname,
+                skycoord_colname=skycoord_colname)
+            if table is None:
+                continue  # No markers by this name, skip it
+
+            if skycoord_colname in table.colnames:
+                coordinates.extend(c for c in table[skycoord_colname])
+                del table[skycoord_colname]
+
+            tables.append(table)
+
+        if len(tables) == 0:
+            return None
+
+        stacked = vstack(tables, join_type='exact')
+
+        if coordinates:
+            n_rows = len(stacked)
+            n_coo = len(coordinates)
+            if n_coo != n_rows:  # This guards against Table auto-broadcast
+                raise ValueError(f'Expects {n_rows} coordinates but found {n_coo},'
+                                 'some markers may be corrupted')
+            stacked[skycoord_colname] = SkyCoord(coordinates)
+
+        return stacked
 
     def _validate_marker_name(self, marker_name):
         """
@@ -750,7 +769,7 @@ class ImageWidget(ipyw.VBox):
         self._viewer.canvas.add(self.dc.CompoundObject(*objs),
                                 tag=marker_name)
 
-    def remove_markers(self, marker_name=None):
+    def remove_markers_by_name(self, marker_name):
         """
         Remove some but not all of the markers by name used when
         adding the markers
@@ -786,15 +805,12 @@ class ImageWidget(ipyw.VBox):
         else:
             self._marktags.remove(marker_name)
 
-    def reset_markers(self):
-        """
-        Delete all markers.
-        """
-
+    def remove_all_markers(self):
+        """Delete all markers using :meth:`remove_markers_by_name`."""
         # Grab the entire list of marker names before iterating
         # otherwise what we are iterating over changes.
-        for marker_name in list(self._marktags):
-            self.remove_markers(marker_name)
+        for marker_name in self.get_marker_names():
+            self.remove_markers_by_name(marker_name)
 
     @property
     def stretch_options(self):

@@ -99,14 +99,14 @@ def test_get_marker_with_names():
     assert len(image._marktags) == 3
 
     for marker in image._marktags:
-        out_table = image.get_markers(marker_name=marker)
+        out_table = image.get_markers_by_name(marker_name=marker)
         # No guarantee markers will come back in the same order, so sort them.
         out_table.sort('x')
         assert (out_table['x'] == input_markers['x']).all()
         assert (out_table['y'] == input_markers['y']).all()
 
     # Get all of markers at once
-    all_marks = image.get_markers(marker_name='all')
+    all_marks = image.get_all_markers()
 
     # That should have given us three copies of the input table
     expected = vstack([input_markers] * 3, join_type='exact')
@@ -129,7 +129,7 @@ def test_unknown_marker_name_error():
     iw = ImageWidget()
     bad_name = 'not a real marker name'
     with pytest.raises(ValueError) as e:
-        iw.get_markers(marker_name=bad_name)
+        iw.get_markers_by_name(marker_name=bad_name)
 
     assert f"No markers named '{bad_name}'" in str(e.value)
 
@@ -155,6 +155,6 @@ def test_empty_marker_name_works_with_all():
     # Start marking to create a new marker set that is empty
     iw.start_marking(marker_name='empty')
 
-    marks = iw.get_markers(marker_name='all')
+    marks = iw.get_all_markers()
     assert len(marks) == len(x)
     assert 'empty' not in marks['marker name']
