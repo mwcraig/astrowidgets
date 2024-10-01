@@ -22,7 +22,7 @@ from astropy.utils.decorators import deprecated
 from ginga.AstroImage import AstroImage
 from ginga.canvas.CanvasObject import drawCatalog
 from ginga.web.jupyterw.ImageViewJpw import EnhancedCanvasView
-from ginga.util.wcs import raDegToString, decDegToString
+from ginga.util.wcs import ra_deg_to_str, dec_deg_to_str
 
 __all__ = ['ImageWidget']
 
@@ -214,8 +214,8 @@ class ImageWidget(ipyw.VBox):
             if image.wcs.wcs is not None:
                 try:
                     ra, dec = image.pixtoradec(data_x, data_y)
-                    val += (f' (RA: {raDegToString(ra)},'
-                            f' DEC: {decDegToString(dec)})')
+                    val += (f' (RA: {ra_deg_to_str(ra)},'
+                            f' DEC: {dec_deg_to_str(dec)})')
                 except Exception:
                     val += ' (RA, DEC: WCS error)'
 
