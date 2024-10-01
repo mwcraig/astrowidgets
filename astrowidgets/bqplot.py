@@ -77,7 +77,7 @@ class _AstroImage(ipw.VBox):
                                               right=0, bottom=0),
                               layout=layout)
 
-        self._image = ImageGL(scales=scales_image)
+        self._image = ImageGL(image=[1], scales=scales_image)
 
         self._figure.marks = (self._image, )
 
