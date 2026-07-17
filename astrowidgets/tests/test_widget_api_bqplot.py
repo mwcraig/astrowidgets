@@ -73,6 +73,41 @@ def test_catalog_markers_use_scatter_shape_size_and_arrays(shape):
     assert marker.marker == shape
 
 
+def test_catalog_marks_use_resolved_label():
+    # Regression test for #213: set_catalog_style and remove_catalog used
+    # the caller's (unresolved) catalog_label as the bqplot mark id, so an
+    # unlabeled set_catalog_style call plotted an orphan second scatter
+    # under the id "None" and an unlabeled remove_catalog raised. The
+    # resolved label must always be the mark id.
+    image = ImageWidget()
+    image.load_catalog(Table({'x': [1.0], 'y': [2.0]}), catalog_label='test')
+    assert list(image._astro_im._scatter_marks) == ['test']
+
+    image.set_catalog_style(size=7)
+    assert list(image._astro_im._scatter_marks) == ['test']
+    assert image._astro_im._scatter_marks['test'].default_size == 49
+
+    image.remove_catalog()
+    assert image._astro_im._scatter_marks == {}
+
+
+def test_catalog_generated_label_targets_marks():
+    # A catalog loaded without a label gets a generated label; styling or
+    # removing it by that generated label must target its marks.
+    image = ImageWidget()
+    image.load_catalog(Table({'x': [1.0], 'y': [2.0]}))
+
+    label = image.catalog_labels[0]
+    assert list(image._astro_im._scatter_marks) == [label]
+
+    image.set_catalog_style(catalog_label=label, size=7)
+    assert list(image._astro_im._scatter_marks) == [label]
+    assert image._astro_im._scatter_marks[label].default_size == 49
+
+    image.remove_catalog(catalog_label=label)
+    assert image._astro_im._scatter_marks == {}
+
+
 class TestBQplotWidget(ImageAPITest):
     image_widget_class = ImageWidget
     cursor_error_classes = (ValueError, TraitError)
@@ -117,11 +152,10 @@ class TestBQplotWidget(ImageAPITest):
     def test_default_colormap_is_greys_r(self, data):
         # With no colormap explicitly set, the display should use Greys_r
         # (low = black, high = white), the usual astronomical convention,
-        # both before and after an image is loaded, and get_colormap should
-        # report it.
+        # both before and after an image is loaded. Settings are stored per
+        # image, so get_colormap can only report it once an image is loaded.
         greys_r = bqcolors('Greys_r')
         assert self.image._astro_im._image.scales['image'].colors == greys_r
-        assert self.image.get_colormap() == 'Greys_r'
 
         self.image.load_image(data)
         assert self.image.get_colormap() == 'Greys_r'
@@ -154,45 +188,45 @@ class TestBQplotWidget(ImageAPITest):
         displayed = np.asarray(self.image._astro_im._image.image)
         np.testing.assert_allclose(displayed, stretch(cuts(arr)))
 
-    def test_reload_existing_label_keeps_its_settings(self):
-        # When new data is loaded under an existing image label, that
-        # label's own stored settings are the current ones for the image
-        # and must be kept, even if a different image was loaded (and so
-        # displayed) more recently.
+    def test_reload_existing_label_carries_displayed_settings(self):
+        # Loading data under an existing image label follows the same
+        # carry-forward rule as any other load: the settings of the image
+        # being replaced on the display -- not the reloaded label's old
+        # settings -- are carried to the new image and shown.
         rng = np.random.default_rng(seed=42)
         arr = rng.integers(1100, 1300, size=(50, 60)).astype(np.uint16)
         arr[25, 30] = 65535
 
-        first_cuts = apviz.AsymmetricPercentileInterval(5, 90)
-        first_stretch = apviz.LogStretch()
         self.image.load_image(arr, image_label='first')
-        self.image.set_cuts(first_cuts, image_label='first')
-        self.image.set_stretch(first_stretch, image_label='first')
+        self.image.set_cuts(apviz.AsymmetricPercentileInterval(5, 90),
+                            image_label='first')
+        self.image.set_stretch(apviz.LogStretch(), image_label='first')
         self.image.set_colormap('viridis', image_label='first')
 
+        second_cuts = apviz.ManualInterval(1100, 1300)
+        second_stretch = apviz.SqrtStretch()
         self.image.load_image(arr, image_label='second')
-        self.image.set_cuts(apviz.ManualInterval(1100, 1300),
-                            image_label='second')
-        self.image.set_stretch(apviz.SqrtStretch(), image_label='second')
+        self.image.set_cuts(second_cuts, image_label='second')
+        self.image.set_stretch(second_stretch, image_label='second')
         self.image.set_colormap('plasma', image_label='second')
 
         new_arr = arr + 10
         self.image.load_image(new_arr, image_label='first')
 
-        assert self.image.get_cuts(image_label='first') is first_cuts
-        assert self.image.get_stretch(image_label='first') is first_stretch
-        assert self.image.get_colormap(image_label='first') == 'viridis'
-        assert self.image._astro_im._image.scales['image'].colors == bqcolors('viridis')
+        assert self.image.get_cuts(image_label='first') is second_cuts
+        assert self.image.get_stretch(image_label='first') is second_stretch
+        assert self.image.get_colormap(image_label='first') == 'plasma'
+        assert self.image._astro_im._image.scales['image'].colors == bqcolors('plasma')
 
         displayed = np.asarray(self.image._astro_im._image.image)
-        np.testing.assert_allclose(displayed, first_stretch(first_cuts(new_arr)))
+        np.testing.assert_allclose(displayed, second_stretch(second_cuts(new_arr)))
 
     def test_load_image_keeps_settings_without_labels(self):
         # The carry-forward of cuts, stretch and colormap must work in the
         # common interactive case where no image_label is ever passed, so
-        # every image and its settings live under the API's default (None)
-        # label. Loading a second image must keep the settings currently in
-        # effect, not fall back to the widget defaults.
+        # every image gets a generated label. Loading a second image must
+        # display it with the settings currently in effect, not fall back
+        # to the widget defaults.
         rng = np.random.default_rng(seed=42)
         arr = rng.integers(1100, 1300, size=(50, 60)).astype(np.uint16)
         arr[25, 30] = 65535
@@ -209,49 +243,44 @@ class TestBQplotWidget(ImageAPITest):
         arr2[10, 15] = 65535
         self.image.load_image(arr2)
 
-        assert self.image.get_cuts() is cuts
-        assert self.image.get_stretch() is stretch
-        assert self.image.get_colormap() == 'viridis'
+        # Both images stay loaded under generated labels, so the get_*
+        # methods need a label; ask about the displayed (new) image.
+        displayed_label = self.image._displayed_image_labels[0]
+        assert self.image.get_cuts(image_label=displayed_label) is cuts
+        assert self.image.get_stretch(image_label=displayed_label) is stretch
+        assert self.image.get_colormap(image_label=displayed_label) == 'viridis'
         assert self.image._astro_im._image.scales['image'].colors == bqcolors('viridis')
 
         displayed = np.asarray(self.image._astro_im._image.image)
         np.testing.assert_allclose(displayed, stretch(cuts(arr2)))
 
-    def test_load_image_without_label_targets_single_labeled_image(self):
-        # An image label of None means "the caller did not specify a
-        # label". Once a labeled image exists, the API layer resolves None
-        # to that label, so an unlabeled load replaces the labeled image
-        # (keeping its settings) and never touches an image stored under
-        # the None label. With two or more labels the target is ambiguous
-        # and the load raises.
+    def test_load_image_without_label_never_replaces(self):
+        # An unlabeled load gets a generated label, so it can never
+        # silently replace a previously loaded image: the labeled image
+        # keeps its data and settings, while the new image takes over the
+        # display with those settings carried forward.
         rng = np.random.default_rng(seed=42)
         arr = rng.integers(1100, 1300, size=(50, 60)).astype(np.uint16)
         arr[25, 30] = 65535
 
-        unlabeled_cuts = apviz.AsymmetricPercentileInterval(5, 90)
-        self.image.load_image(arr)
-        self.image.set_cuts(unlabeled_cuts)
-
         labeled_cuts = apviz.ManualInterval(1100, 1300)
-        self.image.load_image(arr + 1, image_label='labeled')
+        self.image.load_image(arr, image_label='labeled')
         self.image.set_cuts(labeled_cuts, image_label='labeled')
 
         self.image.load_image(arr + 2)
 
-        # The unlabeled load replaced the labeled image and kept its cuts.
+        # The labeled image is untouched...
         np.testing.assert_array_equal(
-            np.asarray(self.image.get_image(image_label='labeled')), arr + 2)
+            np.asarray(self.image.get_image(image_label='labeled')), arr)
         assert self.image.get_cuts(image_label='labeled') is labeled_cuts
 
-        # The image stored under the None label kept its own settings.
-        # Once a user label exists, get_cuts(image_label=None) resolves to
-        # that label, so look at the stored settings directly.
-        assert self.image._images[None].cuts is unlabeled_cuts
-
-        # With two user-defined labels an unlabeled load is ambiguous.
-        self.image.load_image(arr, image_label='labeled2')
-        with pytest.raises(ValueError, match='Multiple image labels'):
-            self.image.load_image(arr)
+        # ...and the new image is displayed, under a generated label, with
+        # the displayed settings carried forward.
+        new_label = self.image._displayed_image_labels[0]
+        assert new_label != 'labeled'
+        np.testing.assert_array_equal(
+            np.asarray(self.image.get_image(image_label=new_label)), arr + 2)
+        assert self.image.get_cuts(image_label=new_label) is labeled_cuts
 
     def test_first_load_stores_widget_default_cuts(self):
         # With nothing loaded yet there are no current settings to carry
