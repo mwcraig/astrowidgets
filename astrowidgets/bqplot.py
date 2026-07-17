@@ -5,7 +5,7 @@ import numpy as np
 from astropy.nddata import NDData
 import astropy.visualization as apviz
 
-from bqplot import Figure, LinearScale, Axis, ColorScale, PanZoom, ScatterGL
+from bqplot import Figure, LinearScale, Axis, ColorScale, PanZoom, Scatter
 from bqplot_image_gl import ImageGL
 from bqplot_image_gl.interacts import (MouseInteraction,
                                        keyboard_events, mouse_events)
@@ -323,12 +323,12 @@ class _AstroImage(ipw.VBox):
     def plot_named_markers(self, x, y, mark_id, color='yellow',
                            size=100, shape='circle', **kwd):
         scale_dict = dict(x=self._scales['x'], y=self._scales['y'])
-        sc = ScatterGL(scales=scale_dict,
-                       x=x, y=y,
-                       colors=[color],
-                       default_size=100,
-                       marker=shape,
-                       fill=False)
+        sc = Scatter(scales=scale_dict,
+                     x=np.asarray(x), y=np.asarray(y),
+                     colors=[color],
+                     default_size=size,
+                     marker=shape,
+                     fill=False)
 
         self._scatter_marks[mark_id] = sc
         self._update_marks()
@@ -414,8 +414,6 @@ class ImageWidget(ipw.VBox, ImageViewerLogic):
         # debugging.
         self._print_out = ipw.Output()
 
-        self.marker = {'color': 'red', 'radius': 20, 'type': 'square'}
-
         self._cursor = ipw.HTML('Coordinates show up here')
 
         self._init_mouse_callbacks()
@@ -475,34 +473,11 @@ class ImageWidget(ipw.VBox, ImageViewerLogic):
             # Nothing to display, so exit
             return
 
-        xc = event_data['domain']['x']
-        yc = event_data['domain']['y']
-
-        if self.click_center:
-            self.center_on((xc, yc))
-
-        if self.is_marking:
-            print('marky marking')
-            # Just hand off to the method that actually does the work
-            self._add_new_single_marker(xc, yc)
-
-    def _add_new_single_marker(self, x_mark, y_mark):
-        # We have location of the new marker and should have the name
-        # of the marker tag and the marker style, so just need to update
-        # the table and draw the new maker.
-
-        marker_name = self._marker_table._interactive_marker_set_name
-        # update the marker table
-        self._marker_table.add_markers([x_mark], [y_mark], marker_name=marker_name)
-
-        # First approach: get any current markers by that name, add this one
-        # remove the old ones and draw the new ones.
-        marks = self.get_markers(marker_name=marker_name)
-        self._astro_im.plot_named_markers(marks['x'], marks['y'],
-                                          marker_name,
-                                          color=self.marker['color'],
-                                          size=self.marker['radius']**2,
-                                          shape=self.marker['type'])
+        # Interactive click features (click-to-center, interactive marking)
+        # were removed in the migration to the astro-image-display-api and
+        # will be rebuilt, see #201. Until then this is intentionally a
+        # no-op so that clicks do not raise and user-registered on_msg
+        # callbacks still run.
 
     # Update the viewport to match changes in the UI
     def _init_watch_image_changes(self):
@@ -695,12 +670,8 @@ class ImageWidget(ipw.VBox, ImageViewerLogic):
         **kwargs
     ):
         super().load_catalog(table, **kwargs)
-        catalog_label = kwargs.pop("catalog_label", None)
-        this_catalog = self.get_catalog(catalog_label=catalog_label)
-        self._astro_im.plot_named_markers(
-            this_catalog["x"],
-            this_catalog["y"],
-            str(catalog_label),
+        catalog_label = kwargs.get("catalog_label", None)
+        self.set_catalog_style(
             **self.get_catalog_style(catalog_label=catalog_label)
         )
 

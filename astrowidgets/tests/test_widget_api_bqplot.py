@@ -1,4 +1,5 @@
 import astropy.visualization as apviz
+from astropy.table import Table
 import numpy as np
 import pytest
 
@@ -7,15 +8,69 @@ from traitlets import TraitError
 from astro_image_display_api.api_test import ImageAPITest
 from astro_image_display_api import ImageViewerInterface
 
-_ = pytest.importorskip("bqplot",
-                        reason="Package required for test is not "
-                               "available.")
+bqplot = pytest.importorskip("bqplot",
+                             reason="Package required for test is not "
+                                    "available.")
 from astrowidgets.bqplot import ImageWidget, bqcolors  # noqa: E402
 
 
 def test_instance():
     image = ImageWidget()
     assert isinstance(image, ImageViewerInterface)
+
+
+def test_mouse_click_does_not_raise_or_block_callbacks():
+    # Regression test for #206: the built-in click handler referenced
+    # attributes that no longer exist, so any click raised AttributeError
+    # and, because ipywidgets runs on_msg callbacks in registration order
+    # with no exception isolation, blocked user-registered callbacks.
+    image = ImageWidget()
+
+    # A click before any image is loaded should be a no-op.
+    image._mouse_click({'domain': {'x': 3, 'y': 3}})
+
+    image.load_image(np.zeros((10, 10)))
+
+    calls = []
+
+    def user_callback(interaction, event_data, buffers):
+        calls.append(event_data)
+
+    image._astro_im.interaction.on_msg(user_callback)
+
+    # Simulate the comm message a real mouse click produces; this invokes
+    # all registered on_msg callbacks in order, built-in handler first.
+    click_event = {'event': 'click', 'domain': {'x': 3, 'y': 3}}
+    image._astro_im.interaction._handle_custom_msg(click_event, [])
+
+    assert calls == [click_event]
+
+
+@pytest.mark.parametrize(
+    "shape", ["circle", "square", "crosshair", "plus", "diamond"]
+)
+def test_catalog_markers_use_scatter_shape_size_and_arrays(shape):
+    image = ImageWidget()
+
+    image.load_catalog(
+        Table({"x": [1.0], "y": [2.0]}),
+        catalog_label="test",
+        catalog_style={"color": "red", "shape": shape, "size": 6},
+    )
+    marker = image._astro_im._scatter_marks["test"]
+    assert type(marker) is bqplot.Scatter
+    assert marker.default_size == 36
+    np.testing.assert_array_equal(marker.x, [1.0])
+    np.testing.assert_array_equal(marker.y, [2.0])
+
+    image.set_catalog_style(
+        catalog_label="test", size=7, shape=shape
+    )
+
+    marker = image._astro_im._scatter_marks["test"]
+    assert type(marker) is bqplot.Scatter
+    assert marker.default_size == 49
+    assert marker.marker == shape
 
 
 class TestBQplotWidget(ImageAPITest):
