@@ -19,7 +19,10 @@ from matplotlib import colormaps as mpl_colormaps
 
 import plotly.graph_objects as go
 
-from astro_image_display_api import ImageViewerLogic, docs_from_super_if_missing
+from astro_image_display_api.image_viewer_logic import (
+    ImageViewerLogic,
+    docs_from_image_viewer_logic_if_missing,
+)
 
 __all__ = ['ImageWidget']
 
@@ -42,7 +45,7 @@ SHAPE_TO_SYMBOL = {
 
 
 # The inheritance order below matters -- VBox needs to come first
-@docs_from_super_if_missing
+@docs_from_image_viewer_logic_if_missing
 class ImageWidget(ipw.VBox, ImageViewerLogic):
     def __init__(self, *args, display_width=500, display_aspect_ratio=1):
         super().__init__(*args)

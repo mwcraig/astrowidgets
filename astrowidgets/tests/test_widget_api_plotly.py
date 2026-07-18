@@ -171,11 +171,11 @@ class TestPlotlyWidget(ImageAPITest):
             expected_rgb(data, self.image.get_cuts(),
                          self.image.get_stretch(), 'Greys_r'))
 
-    def test_load_image_keeps_current_display_settings(self):
-        # Loading a new image should display it with the cuts, stretch and
-        # colormap that are currently in effect, carried forward from the
-        # previously displayed image, and store them for the new image so
-        # that the get_* methods agree with the display.
+    def test_load_image_new_label_gets_default_settings(self):
+        # Loading an image under a new label should display it with the
+        # widget's default cuts, stretch and colormap -- not settings
+        # carried forward from the previously displayed image -- and the
+        # previous label keeps its own settings untouched.
         rng = np.random.default_rng(seed=42)
         arr = rng.integers(1100, 1300, size=(50, 60)).astype(np.uint16)
         arr[25, 30] = 65535
@@ -189,13 +189,20 @@ class TestPlotlyWidget(ImageAPITest):
 
         self.image.load_image(arr, image_label='second')
 
-        assert self.image.get_cuts(image_label='second') is cuts
-        assert self.image.get_stretch(image_label='second') is stretch
-        assert self.image.get_colormap(image_label='second') == 'viridis'
+        second_cuts = self.image.get_cuts(image_label='second')
+        second_stretch = self.image.get_stretch(image_label='second')
+        assert second_cuts is not cuts
+        assert isinstance(second_stretch, apviz.LinearStretch)
+        assert self.image.get_colormap(image_label='second') == 'Greys_r'
 
         displayed = np.asarray(self.image._image_trace.z)
         np.testing.assert_array_equal(
-            displayed, expected_rgb(arr, cuts, stretch, 'viridis'))
+            displayed, expected_rgb(arr, second_cuts, second_stretch, 'Greys_r'))
+
+        # The first label's settings are untouched.
+        assert self.image.get_cuts(image_label='first') is cuts
+        assert self.image.get_stretch(image_label='first') is stretch
+        assert self.image.get_colormap(image_label='first') == 'viridis'
 
     def test_apply_viewport_sets_axis_ranges(self, data):
         # The stored viewport must be pushed into the figure as explicit
