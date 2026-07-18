@@ -1,5 +1,132 @@
+[project]
+name = "astrowidgets"
+description = "Widgets for the Jupyter notebook and JupyterLab"
+readme = "README.rst"
+authors = [
+    { name = "Astropy Developers", email = "mattwcraig@gmail.com"},
+]
+license = "BSD-3-Clause"
+license-files = ["LICENSE.rst"]
+keywords = [
+    "astronomy",
+    "python",
+]
+classifiers = [
+    "Programming Language :: Python",
+]
+dependencies = [
+    "astropy",
+    "astro-image-display-api>=0.3.0",
+    "ginga>=3.4",
+    "pillow",
+    "ipywidgets>=8",
+    "ipyevents>=0.6.3",
+    "jupyterlab>=3",
+    "aggdraw",
+    "bqplot>=0.12,<0.14",
+    "bqplot-image-gl",
+    "matplotlib",
+]
+dynamic = [
+    "version",
+]
+requires-python = ">=3.11"
+
+[project.urls]
+Homepage = "https://github.com/astropy/astrowidgets"
+Repository = "https://github.com/astropy/astrowidgets"
+
+[project.optional-dependencies]
+plotly = [
+    "plotly>=6",
+    "anywidget",
+    "kaleido",
+]
+test = [
+    "pytest-astropy",
+    "pytest-cov",
+    "pytest-mock",
+]
+docs = [
+    "sphinx-astropy",
+]
+
 [build-system]
 requires = ["setuptools",
             "setuptools_scm",
             "wheel"]
 build-backend = 'setuptools.build_meta'
+
+[tool.setuptools]
+packages = ["astrowidgets"]
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+extend-ignore = ["E501", "E402", "F403"]
+
+[tool.pytest.ini_options]
+astropy_header = true
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:traitlets",
+]
+
+[tool.coverage.run]
+source = ["astrowidgets"]
+omit = [
+    "astrowidgets/cython_version*",
+    "astrowidgets/setup_package*",
+    "astrowidgets/*/setup_package*",
+    "astrowidgets/*/*/setup_package*",
+    "astrowidgets/tests/*",
+    "astrowidgets/*/tests/*",
+    "astrowidgets/*/*/tests/*",
+    "astrowidgets/version*",
+    "*/astrowidgets/cython_version*",
+    "*/astrowidgets/setup_package*",
+    "*/astrowidgets/*/setup_package*",
+    "*/astrowidgets/*/*/setup_package*",
+    "*/astrowidgets/tests/*",
+    "*/astrowidgets/*/tests/*",
+    "*/astrowidgets/*/*/tests/*",
+    "*/astrowidgets/version*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "except ImportError",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "def main(.*):",
+    "pragma: py{ignore_python_version}",
+    "def _ipython_key_completions_",
+]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+
+[tool.pixi.pypi-dependencies]
+astrowidgets = { path = ".", editable = true }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+test = { features = ["test"], solve-group = "default" }
+
+[tool.pixi.tasks]
+# run unit tests with `pixi run test`
+test = { cmd = "pytest", default-environment = "test" }
+
+[tool.pixi.feature.test.dependencies]
+pytest = ">=9.1.1,<10"
+pytest-astropy = ">=0.11.0,<0.12"
+pytest-cov = ">=7.1.0,<8"
+pytest-mock = ">=3.15.1,<4"
+
+[tool.pixi.dependencies]
+nodejs = ">=26.4.0,<26.6"
+
